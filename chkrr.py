@@ -85,14 +85,17 @@ def find_rrsig_ds(list,query):
 	if res1 != None and res2 != None and res3 != None:
 		print "---->rrsig for DS get success"
 
-def check(list,query):
+def check(list,query,types,recursive_flag):
+	if recursive_flag != 0:
+		types = "DS"
 	res0 = re.search("WE HAVE MATERIAL, WE NOW DO VALIDATION",list[0])
 	if res0 != None:
 		print "---->check start normal"
 	else:
 		print "---->check failed (0) program will exit..."
 		return
-	str1 = "VERIFYING NS RRset for "+query
+
+	str1 = "VERIFYING %s RRset for %s" % (types,query)
 	res11 = re.search(str1, list[1])
 	res12 = re.search("success",list[1])
 	res13 = re.search("expired",list[1])
@@ -102,25 +105,53 @@ def check(list,query):
 		print "---->check rrset by rrsig......NO(expired)"
 		add_result(list)
 		return
+
 	str2 = "OK We found DNSKEY \(or more\) to validate the RRset"
 	res2 = re.search(str2, list[2])
 	if res2 != None:
-		print "---->KSK find"
+		print "---->ksk find"
+
+	
 	str31 = "Now, we are going to validate this DNSKEY by the DS"
 	res311 = re.search(str31, list[3])
 	if res311 != None:
+		print "there isn't trustkey we want find ds"
 		str41 = "the DNSKEY isn't trusted-key and there isn't DS"+\
 				" to validate the DNSKEY"
-		print str41
 		res411 = re.search(str41, list[4])
 		res412 = re.search("FAILED", list[4])
 		if res411 != None and res412 != None:
-			print "DNSSEC validation is NO"
+			print "No ds!!! DNSSEC validation is......failed"
 			return
 		str42 = "OK a DS valids a DNSKEY in the RRset"
 		res421 = re.search(str42,list[4])
 		if res421 != None:
-			print "---->check ksk(by DS) yes"
+			print "---->check ksk(by DS)......yes"
+		
+		str51 = "Now verify that this DNSKEY validates the DNSKEY RRset"
+		res51 = re.search(str51,list[5])
+		if res51 != None:
+			print "check zsk start"
+		else:
+			print "checking zsk[quit]"
+			return
+
+		str61 = "VERIFYING DNSKEY RRset for %s. with DNSKEY" % query
+		res61 = re.search(str61,list[6])
+		res62 = re.search("success",list[6])
+		if res61 != None and res62 != None:
+			print "---->check zsk(by ksk)......yes"
+		else:
+			print "---->check zsk,faiked"
+			return
+		
+		str81 = "Now, we want to validate the DS"
+		str82 = "recursive call"
+		res81 = re.search(str81,list[8])
+		res82 = re.search(str82,list[8])
+		if res81 != None and res82 != None:
+			print "check current data......yse;start recursive check"
+			return
 
 	str32 = "Ok, find a Trusted Key in the DNSKEY RRset"
 	res321 = re.search(str32, list[3])
@@ -131,42 +162,7 @@ def check(list,query):
 		if res431 != None and res432 != None and query == ".":
 			print "DNSSEC validation is yes"
 			return
-	return add_result()
 
-def proc(args,dst):
-	if len(args) == 3:
-		name = args[0]
-		types = args[2]
-	if len(args) == 2:
-		name = args[0]
-		types = args[1]
-	print name
-	print types
-	cmd = "dig @%s %s %s +sigchase +trusted-key=/root/trusted-key.key" % (dst,name,types)
-	sub=subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
-	sub.wait()
-#	print type(sub)
-	linelist = sub.stdout.readlines()
-	print linelist	
-	print "---------------->"
-	split_list = modify_split(linelist)
-	semantic_list = modify_semantic_split(split_list)
-	result = find_rrset_query(semantic_list[0], name)
-	find_rrsig_rrset(semantic_list[1], name)
-	find_rrset_dnskey(semantic_list[2], name)
-	find_rrsig_dnskey(semantic_list[3], name)
-	rcode = find_rrset_ds(semantic_list[4],name)
-	if rcode == 0:
-		find_rrsig_ds(semantic_list[5],name)
-		check(semantic_list[6],name)	
-	if rcode == -1:
-		check(semantic_list[5],name)
-
-	print "query: \n%s IN %s" % (name,types)
-	print "answer:"
-	for i in result:
-		print i
-	return result,add_result()
 
 
 
@@ -193,15 +189,67 @@ def modify_semantic_split(total):
 			continue
 		if res > 1:
 			split_list.append(total[num])
-	for i in split_list:
-		print i
+#	for i in split_list:
+#		print i
 	return split_list
 
 
 
+def proc(name, types, dst):
+	cmd = "dig @%s %s %s +sigchase +trusted-key=/root/trusted-key.key" % (dst,name,types)
+	print cmd
+	sub=subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
+	sub.wait()
+#	print type(sub)
+	linelist = sub.stdout.readlines()
+#	print linelist	
+	print "---------------->"
+	split_list = modify_split(linelist)
+	semantic_list = modify_semantic_split(split_list)
+
+	recursive = 0
+	cur_number = 0
+	result,cur_number = proc1(name, types, semantic_list, cur_number, recursive)
+	recursive = recursive+1
+	if name != ".":
+		proc1(".","A",semantic_list,cur_number,recursive)
 
 
 
+def proc1(name, types, semantic_list,xuhao,recursive_flag):
+	xuhaoing = xuhao
+	end_xuhao = 0
+	result = []
+	if recursive_flag == 0:
+		result = find_rrset_query(semantic_list[xuhaoing], name)
+		xuhaoing = xuhaoing+1
+		find_rrsig_rrset(semantic_list[xuhaoing], name)
+		xuhaoing = xuhaoing+1
+	find_rrset_dnskey(semantic_list[xuhaoing], name)
+	xuhaoing = xuhaoing+1
+	find_rrsig_dnskey(semantic_list[xuhaoing], name)
+	xuhaoing = xuhaoing+1
+	rcode = find_rrset_ds(semantic_list[xuhaoing],name)
+	xuhaoing = xuhaoing+1
+	if rcode == 0:
+		find_rrsig_ds(semantic_list[xuhaoing],name)
+		xuhaoing = xuhaoing+1
+		check(semantic_list[xuhaoing],name,types,recursive_flag)
+		xuhaoing = xuhaoing+1
+	if rcode == -1:
+		check(semantic_list[xuhaoing],name,types,recursive_flag)
+		xuhaoing = xuhaoing+1
+	end_xuhao = xuhaoing
+
+	if recursive_flag == 0:
+		print "query: \n%s IN %s" % (name,types)
+		print "answer:"
+		for i in result:
+			print i
+
+		print result
+		print end_xuhao
+		return result,end_xuhao
 
 
 
@@ -221,7 +269,6 @@ def main(argv):
 			p_usage()
 			return 0
 		elif o in ('-d'):
-			print a
 			glo_dst = a
 			noglo_dst = a
 		elif o in ('-v'):
@@ -230,7 +277,19 @@ def main(argv):
 		else:
 			p_usage()
 			sys.exit()
-	proc(args, noglo_dst)
+	if len(args) == 3:
+		name = args[0]
+		types = args[2]
+	if len(args) == 2:
+		name = args[0]
+		types = args[1]
+#	print name
+#	print types
+
+	proc(name, types, noglo_dst)
+
+
+
 
 	
 
