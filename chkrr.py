@@ -14,10 +14,26 @@ def p_usage():
 	print "usage: check [-hv] [-d query dst]\n"
 	print "  -h/--help : print help usage"
 	print "  -v : show version"
-	print "  -d : query destination"
+	print "  -d : query target"
 
 def p_version():
 	print version
+
+def add_result(list):
+	res1 = re.search("SUCCESS", list[-1])
+	if res1 != None:
+		print "DNSSEC validation SUCCESS"
+		return 0
+	res2 = re.search("FAILED", list[-1])
+	if res2 != None:
+		print "DNSSEC validation FAILED"
+		return -1
+
+def add_answer(list):
+	result = []
+	for i in list[1:]:
+		result.append(i.split()[4])
+	return result
 
 def find_rrset_query(list,query):
 	res1 = re.search("RRset to chase",list[0])
@@ -25,6 +41,12 @@ def find_rrset_query(list,query):
 	res3 = re.search("NS",list[1])
 	if res1 != None and res2 != None and res3 != None:
 		print "---->rrset get success"
+
+	result = []
+	for i in list[1:]:
+		result.append(i.split()[4])
+	return result
+
 def find_rrset_dnskey(list,query):
 	res1 = re.search("DNSKEYset that signs the RRset",list[0])
 	res2 = re.search(query,list[1])
@@ -36,13 +58,13 @@ def find_rrset_ds(list,query):
 					,list[0])
 	if res0 != None:
 		print "---->reached top! root haven't DS"
-		return 
+		return -1
 	res1 = re.search("DSset of the DNSKEYset",list[0])
 	res2 = re.search(query,list[1])
 	res3 = re.search("DS",list[1])
 	if res1 != None and res2 != None and res3 != None:
 		print "---->ds for rrsig(dnskey) get success"
-	
+		return 0
 def find_rrsig_rrset(list,query):
 	res1 = re.search("RRSIG of the RRset to chase",list[0])
 	res2 = re.search(query,list[1])
@@ -56,26 +78,34 @@ def find_rrsig_dnskey(list,query):
 	res3 = re.search(r"RRSIG\tDNSKEY",list[1])
 	if res1 != None and res2 != None and res3 != None:
 		print "---->rrsig for dnskey get success"
-def find_rrsig_ds():
-	pass
+def find_rrsig_ds(list,query):
+	res1 = re.search("RRSIG of the DSset of the DNSKEYset",list[0])
+	res2 = re.search(query,list[1])
+	res3 = re.search(r"RRSIG\tDS",list[1])
+	if res1 != None and res2 != None and res3 != None:
+		print "---->rrsig for DS get success"
+
 def check(list,query):
 	res0 = re.search("WE HAVE MATERIAL, WE NOW DO VALIDATION",list[0])
 	if res0 != None:
 		print "---->check start normal"
 	else:
-		print "---->check failed ! program will exit..."
+		print "---->check failed (0) program will exit..."
 		return
 	str1 = "VERIFYING NS RRset for "+query
 	res11 = re.search(str1, list[1])
 	res12 = re.search("success",list[1])
+	res13 = re.search("expired",list[1])
 	if res11 != None and res12 != None:
 		print "---->check rrset by rrsig......yes"
-
+	if res11 != None and res13 != None:
+		print "---->check rrset by rrsig......NO(expired)"
+		add_result(list)
+		return
 	str2 = "OK We found DNSKEY \(or more\) to validate the RRset"
 	res2 = re.search(str2, list[2])
 	if res2 != None:
 		print "---->KSK find"
-
 	str31 = "Now, we are going to validate this DNSKEY by the DS"
 	res311 = re.search(str31, list[3])
 	if res311 != None:
@@ -101,29 +131,42 @@ def check(list,query):
 		if res431 != None and res432 != None and query == ".":
 			print "DNSSEC validation is yes"
 			return
+	return add_result()
 
-def proc(args):
+def proc(args,dst):
 	if len(args) == 3:
 		name = args[0]
 		types = args[2]
 	if len(args) == 2:
 		name = args[0]
 		types = args[1]
-	cmd = "dig @127.0.0.1 . NS +sigchase +trusted-key=/root/trusted-key.key"
+	print name
+	print types
+	cmd = "dig @%s %s %s +sigchase +trusted-key=/root/trusted-key.key" % (dst,name,types)
 	sub=subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
 	sub.wait()
-	print type(sub)
+#	print type(sub)
 	linelist = sub.stdout.readlines()
 	print linelist	
 	print "---------------->"
 	split_list = modify_split(linelist)
 	semantic_list = modify_semantic_split(split_list)
-	find_rrset_query(semantic_list[0], '.')
-	find_rrsig_rrset(semantic_list[1], '.')
-	find_rrset_dnskey(semantic_list[2], '.')
-	find_rrsig_dnskey(semantic_list[3], '.')
-	find_rrset_ds(semantic_list[4],'.')
-	check(semantic_list[5],'.')	
+	result = find_rrset_query(semantic_list[0], name)
+	find_rrsig_rrset(semantic_list[1], name)
+	find_rrset_dnskey(semantic_list[2], name)
+	find_rrsig_dnskey(semantic_list[3], name)
+	rcode = find_rrset_ds(semantic_list[4],name)
+	if rcode == 0:
+		find_rrsig_ds(semantic_list[5],name)
+		check(semantic_list[6],name)	
+	if rcode == -1:
+		check(semantic_list[5],name)
+
+	print "query: \n%s IN %s" % (name,types)
+	print "answer:"
+	for i in result:
+		print i
+	return result,add_result()
 
 
 
@@ -141,9 +184,6 @@ def modify_split(total):
 			split_list.append(total[lastsplit+1:num])
 			lastsplit = num
 	return split_list
-#	for i in split_list:
-#		print i
-
 
 def modify_semantic_split(total):
 	split_list = []
@@ -166,6 +206,7 @@ def modify_semantic_split(total):
 
 
 def main(argv):
+	noglo_dst = "127.0.0.1"
 	try:
 		opts,args = getopt.getopt(argv[1:], "hvd:", ["help"])
 	except getopt.error,errinfo:
@@ -182,13 +223,14 @@ def main(argv):
 		elif o in ('-d'):
 			print a
 			glo_dst = a
+			noglo_dst = a
 		elif o in ('-v'):
 			p_version()
 			return 0
 		else:
 			p_usage()
 			sys.exit()
-	proc(args)
+	proc(args, noglo_dst)
 
 	
 
