@@ -24,14 +24,21 @@ if __name__ == "__main__":
 	serverip = input_iterms("ServerIP")
 	domain  = input_iterms("Donains")
 	pubpath  = input_iterms("Pubpath")
-	country_content.extend([serverip,domain,pubpath])
-	total_items[cname] = country_content
+	merged_dict = dict(serverip,**dict(domain,**pubpath))
+	total_items[cname] = merged_dict
 	
-	encodedjson = json.dumps(total_items)
-	print country_content
+#	encodedjson = json.dumps(total_items)
+	jsonfile = open("./argument",'r+')
+	jsonString = json.load(jsonfile)
+	jsonString[cname] = merged_dict
+	
+	jsonfile.seek(0)
+	json.dump(jsonString,jsonfile,indent = 4,sort_keys = True)
+	jsonfile.close()
+#	print country_content
 	print total_items
-	print "-------->"
-	print encodedjson
+#	print "-------->"
+#	print encodedjson
 
 
 

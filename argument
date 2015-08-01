@@ -1,0 +1,24 @@
+{
+    "US": {
+        "Donains": [
+            "us"
+        ], 
+        "Pubpath": [
+            "./kkkkkkkk"
+        ], 
+        "ServerIP": [
+            "1.2.3.4"
+        ]
+    }, 
+    "ru": {
+        "Donains": [
+            "ru"
+        ], 
+        "Pubpath": [
+            "./ru"
+        ], 
+        "ServerIP": [
+            "1.2.3.4"
+        ]
+    }
+}
