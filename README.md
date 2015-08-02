@@ -32,7 +32,8 @@ chkrr.py的输入文件,用于批处理查询,查询的结果存储在queryfile.
 queryfile.result
 保存queryfile的查询结果
 
-
+argument
+采用json的格式保存协约内容,是argument_input.py的输出
 
 
 
