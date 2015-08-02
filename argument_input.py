@@ -20,7 +20,7 @@ if __name__ == "__main__":
 	cname = raw_input("please input country name:")
 
 	serverip = input_iterms("ServerIP")
-	domain  = input_iterms("Donains")
+	domain  = input_iterms("Domains")
 	pubpath  = input_iterms("Pubpath")
 	merged_dict = dict(serverip,**dict(domain,**pubpath))
 	
