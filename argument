@@ -1,24 +1,26 @@
 {
-    "US": {
-        "Donains": [
-            "us"
+    "COM": {
+        "Domains": [
+            "com."
         ], 
         "Pubpath": [
-            "./kkkkkkkk"
+            "./root.key"
         ], 
         "ServerIP": [
-            "1.2.3.4"
+            "127.0.0.1",
+            "173.26.101.233" 
         ]
     }, 
-    "ru": {
-        "Donains": [
-            "ru"
+    "ROOT": {
+        "Domains": [
+            "."
         ], 
         "Pubpath": [
-            "./ru"
+            "./root.key"
         ], 
         "ServerIP": [
-            "1.2.3.4"
+            "127.0.0.1",
+            "173.26.101.233"
         ]
     }
 }
