@@ -18,27 +18,21 @@ def input_iterms(items_key):
 	
 if __name__ == "__main__":
 	cname = raw_input("please input country name:")
-	total_items = {}
-	country_content = []
 
 	serverip = input_iterms("ServerIP")
 	domain  = input_iterms("Donains")
 	pubpath  = input_iterms("Pubpath")
 	merged_dict = dict(serverip,**dict(domain,**pubpath))
-	total_items[cname] = merged_dict
 	
-#	encodedjson = json.dumps(total_items)
 	jsonfile = open("./argument",'r+')
-	jsonString = json.load(jsonfile)
-	jsonString[cname] = merged_dict
+	jsonString = json.load(jsonfile)	#jsonString is a dict
+	jsonString[cname] = merged_dict		#add an item to jsonString
 	
 	jsonfile.seek(0)
 	json.dump(jsonString,jsonfile,indent = 4,sort_keys = True)
+	#write and cover origin items
 	jsonfile.close()
-#	print country_content
 	print total_items
-#	print "-------->"
-#	print encodedjson
 
 
 
