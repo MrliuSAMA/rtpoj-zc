@@ -1,0 +1,4 @@
+.	NS	127.0.0.1	b.root-servers.net.	verify_OK
+.	NS	127.0.0.1	a.root-servers.net.	verify_OK
+b.root-servers.net.	A	127.0.0.1	173.7.8.56	verify_OK
+a.root-servers.net.	A	127.0.0.1	173.6.8.48	verify_OK
