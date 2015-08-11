@@ -1,4 +1,2 @@
-.	NS	127.0.0.1	./root.key
-.	NS	173.26.101.233	./root.key
-com.	NS	127.0.0.1	./root.key
-com.	NS	173.26.101.233	./root.key
+cn.	NS	127.0.0.1	/root/trusted-key.key
+ru.	NS	127.0.0.1	/root/trusted-key.key

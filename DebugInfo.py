@@ -16,4 +16,10 @@ def print_result(name, types, answer):
 	for i in answer:
 		print i
 
+def print_dict_valueIslist(dict):
+	keylist = dict.iterkeys()
+	for key in keylist:
+		print key
+		for valueitem in dict[key]:
+			print valueitem
 

@@ -123,7 +123,7 @@ def find_And_check(name, types, semantic_list, start_seqno, recursive_flag):
 
 def proc_file(filepath):
 	file = open(filepath, 'r')
-	outputfile = filepath.strip().split('/')[-1]+".result"
+	outputfile = filepath.strip().split('/')[-1].split('.')[-2]+".out"
 	file_res = open(outputfile, 'w')
 
 	querys = file.readlines()
@@ -157,7 +157,7 @@ def main(argv):
 	noglo_dst	= "127.0.0.1"
 	name		= "null"
 	types		= "null"
-	filepath	= "./queryfile"
+	filepath	= "./queryfile.in"
 	try:
 		opts,args = getopt.getopt(argv[1:], "hvd:f:", ["help"])
 	except getopt.GetoptError,info:
