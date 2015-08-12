@@ -1,16 +1,18 @@
 import subprocess
 import DebugInfo
 import re
+import os
 
 DBPath = "/var/namedFaker"
 ConfigPath = "/etc"
+BindIp = "173.26.101.233"
 
 def CreateOptions(FileName	= "./named.conf",\
-				  MainDir	= "/var/namedFaker",\
-				  BindIp	= "173.26.101.236"):
+				  MainDir	= "/var/namedFakier",\
+				  ListenIp	= "173.26.101.236"):
 	fp = open(FileName,'w+')
 	fp.write("options {\n")
-	fp.write("\tlisten-on port 53 { 127.0.0.1;%s; };\n" % BindIp)
+	fp.write("\tlisten-on port 53 { 127.0.0.1;%s; };\n" % ListenIp)
 	fp.write("\tdirectory\t\t\t\"%s\";\n" % MainDir)
 	fp.write("\tdump-file\t\t\t\"data/cache_dump.db\";\n")
 	fp.write("\tstatistics-file\t\t\t\"data/named_stats.txt\";\n")
@@ -145,15 +147,24 @@ def ExportTrustedKey(DBpath,Keydict):
 	fpr.close()
 	fpw.close()
 
-
+def init(Path):
+	res = os.path.exists(Path)
+	if res == True:
+		pass
+	else:
+		cmd = "mkdir %s" % Path
+		sub = subprocess.Popen(cmd, shell=True)
+		sub.wait()
 
 
 
 
 
 if __name__ == "__main__":
+	init(DBPath)
+
 	GroupDict = File2GroupLists()
-	CreateOptions()
+	CreateOptions(MainDir = DBPath, ListenIp = BindIp)
 	CreateLogging()
 	CreateMultiZone(GroupDict)
 
