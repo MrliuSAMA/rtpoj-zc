@@ -41,11 +41,11 @@ v0.1.3
 ---服务器端  
   
 * AutoConfig.py  
-自动化的配置服务器，生成用于在bind上发布数据时使用的ZSK，KSK，ZoneDB,ZONESignedDB,NamedConf文件  
+自动化的配置服务器，生成用于在bind上发布数据时使用的ZSK,KSK,ZoneDB,ZONESignedDB,NamedConf文件  
 >调用  
 >  
 >debuginfo.py  
->将打印调试信息的功能封装到一个模块中,不必每次打印信息时重复写各种类型的print.
+>将打印调试信息的功能封装到一个模块中,不必每次打印信息时重复写各种类型的print.  
 >每种类型的数据的打印都封装成一句话的函数  
 >  
 >IO(输入输出文件)  
