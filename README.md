@@ -51,9 +51,25 @@ ZSK,KSK,ZoneDB,ZONESignedDB,NamedConf文件
 >  
 >IO(输入输出文件)  
 >  
->config.in  
 >AutoConfig.py的输入文件,用于提供数据服务器的数据源  
-  
+* 客户端
+
+	* ChkRR.py  
+利用dig工具校验资源记录集,完成数据元素的获取和校验  
+>调用  
+>  
+>debuginfo.py  
+>将打印调试信息的功能封装到一个模块中,不必每次打印信息时重复写各种类型的print.
+>每种类型的数据的打印都封装成一句话的函数  
+>fc.py  
+>主功能函数,被chkrr.py调用,用于打印优化后的调试信息  
+>  
+>IO(输入输出文件)  
+>  
+>queryfile.in  
+>ChkRR.py的输入文件,用于批处理查询,查询的结果存储在queryfile.out中  
+>queryfile.out  
+>ChkRR.py的输出文件,保存queryfile.in的查询结果
 
 
 
