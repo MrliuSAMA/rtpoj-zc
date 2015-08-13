@@ -28,7 +28,7 @@ v0.1.3
 >argument.in  
 >采用json的格式保存协约内容,是ArgumentInput.py的输出  
   
-* Argument2Queryfile.py  
+	* Argument2Queryfile.py  
 用于从标准化的json文件中,提取出脚本想要自动获取并校验的查询  
 >IO(输入输出文件)  
 >  
