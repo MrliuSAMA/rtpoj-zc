@@ -4,7 +4,8 @@ v0.1.3
 
 ##客户端
 
-	* ChkRR.py  
+###ChkRR.py
+
 利用dig工具校验资源记录集,完成数据元素的获取和校验  
 >调用  
 >  
@@ -20,15 +21,17 @@ v0.1.3
 >ChkRR.py的输入文件,用于批处理查询,查询的结果存储在queryfile.out中  
 >queryfile.out  
 >ChkRR.py的输出文件,保存queryfile.in的查询结果	  
-  
-	* ArgumentInput.py  
+
+###ArgumentInput.py
+
 用于将协约内容标准化为json格式的文件,半自动的小插件  
 >IO(输入输出文件)  
 >  
 >argument.in  
 >采用json的格式保存协约内容,是ArgumentInput.py的输出  
-  
-	* Argument2Queryfile.py  
+ 
+###Argument2Queryfile.py
+
 用于从标准化的json文件中,提取出脚本想要自动获取并校验的查询  
 >IO(输入输出文件)  
 >  
@@ -40,7 +43,8 @@ v0.1.3
 
 ##服务器端  
   
-	* AutoConfig.py  
+###AutoConfig.py
+
 自动化的配置服务器，生成用于在bind上发布数据时使用的ZSK,KSK,ZoneDB,ZONESignedDB,NamedConf文件  
 >调用  
 >  
