@@ -2,7 +2,7 @@ rtpoj-zc Means Root Zone Project-(Zone Communication)
 
 v0.1.3
 
-##客户端
+##客户端  
 
 	*ChkRR.py  
 利用dig工具校验资源记录集,完成数据元素的获取和校验  
@@ -39,7 +39,7 @@ v0.1.3
 
 
 ##服务器端  
-  
+
 	* AutoConfig.py  
 自动化的配置服务器，生成用于在bind上发布数据时使用的ZSK,KSK,ZoneDB,ZONESignedDB,NamedConf文件  
 >调用  

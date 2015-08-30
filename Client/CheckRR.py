@@ -4,21 +4,39 @@ import sys
 import subprocess
 import DebugInfo
 import FindCheck
-glo_dst = "127.0.0.1"
+
 debug = 0
 version = "0.1"
 
 def p_usage():
 	print "\n\n\t\tCheck RRsets Tools"+"[version %s]\t\t\n" % version 
-	print "\tusage example:","chkrr -d xxx.xxx.xxx.xxx com. NS\n"
-	print "\tusage: check [-hv] [-d query dst]\n"
-	print "\t-h/--help : print help usage"
-	print "\t-v : show version"
-	print "\t-d : query target"
+	print "usage: chkrr\t[-v version][-t=dst_ip query target][-h help manual]"
+	print "\t\t[-D debug info][-d short debug info][-l log record]"
+	print "\t\t[-f=file_path filemode]"
+	print "\n"
+	print "The most commonly used git commands are:"
+	print "   -v\t Show current version of program"
+	print "   -t\t Decide where the DNS query will be send to"
+	print "   --help\t"
+	print "   -h\t Show the help manual of program"
+	print "   -d\t Show brief debug info to debuger"
+	print "   -D\t Show detailed debug info to debuger"
+	print "   -l\t Recording log to file,log will write each query&answer"
+	print "   -f\t Batch mode,lunch multi items in file."
+	print "   \t cautions! Batchmode will ignore args except -l"
+	print "\n"
+	print "Some usage tips, maybe it will helps:"
+	print "   1.  chkrr cn. NS -t 127.0.0.1"
+	print "   2.  chkrr cn. IN NS -t 127.0.0.1"
+	print "   3.  chkrr cn. NS -t 127.0.0.1 -d"
+	print "   4.  chkrr cn. NS -t 127.0.0.1 -D"
+	print "   5.  chkrr -f ./queryfile.in"
+	print "   6.  chkrr -f ./queryfile.in -l"
+	
+
 
 def p_version():
 	print version
-
 
 
 def add_result(list):
@@ -30,7 +48,6 @@ def add_result(list):
 	if res2 != None:
 		print "DNSSEC validation FAILED"
 		return -1
-
 
 
 def split2block(total):
@@ -49,7 +66,6 @@ def split2block(total):
 	return split_list
 
 
-
 def cut_oneline(total):
 	split_list = []
 	for num in range(len(total)):
@@ -59,7 +75,6 @@ def cut_oneline(total):
 		if res > 1:
 			split_list.append(total[num])
 	return split_list
-
 
 
 #run a proc means a fetch and a total verify for one DNS query 
@@ -84,7 +99,6 @@ def proc(name, types, dst, keypath):
 		if recursive != 0:		#recursive verify start with DS record
 			find_And_check(".","DS",semantic_list,cur_number,recursive)
 	return response,verify_result
-
 
 
 #run a find_And_check means a partical verify for a DNS query
@@ -120,13 +134,12 @@ def find_And_check(name, types, semantic_list, start_seqno, recursive_flag):
 	return result,end_seqno,0
 
 
-
 def proc_file(filepath):
 	file = open(filepath, 'r')
 	outputfile = filepath.strip().split('/')[-1].split('.')[-2]+".out"
 	file_res = open(outputfile, 'w')
-
 	querys = file.readlines()
+	res = []
 	for oneline in querys:
 		cmd = oneline.strip().split()
 		res,status = proc(cmd[0],cmd[1],cmd[2],cmd[3])
@@ -136,17 +149,16 @@ def proc_file(filepath):
 			status = "verify_NO"			
 		for every_answer in res:
 			file_res.write("%s\t%s\t%s\t%s\t%s\n" % (cmd[0],cmd[1],cmd[2],every_answer,status))
-		file_res.close()
-
-		file_res = open(outputfile, 'a')
-		for every_answer in res:
-			res_A,status_A = proc(every_answer,'A',cmd[2],cmd[3])
-			if status_A == 0:
-				status_A = "verify_OK"
-			else:
-				status_A = "verify_NO"
-			for items in res_A:
-				file_res.write("%s\t%s\t%s\t%s\t%s\n" % (every_answer,'A',cmd[2],items,status_A))
+#		file_res.close()
+#		file_res = open(outputfile, 'a')
+	for every_answer in res:
+		res_A,status_A = proc(every_answer,'A',cmd[2],cmd[3])
+		if status_A == 0:
+			status_A = "verify_OK"
+		else:
+			status_A = "verify_NO"
+		for items in res_A:
+			file_res.write("%s\t%s\t%s\t%s\t%s\n" % (every_answer,'A',cmd[2],items,status_A))
 
 	file.close()
 	file_res.close()
