@@ -2,17 +2,20 @@ import subprocess
 import DebugInfo
 import re
 import os
+import pprint
 
 DBPath = "/var/namedFaker"
 ConfigPath = "/etc"
 BindIp = "173.26.101.233"
+BindPort = "53"
 
 def CreateOptions(FileName	= "./named.conf",\
 				  MainDir	= "/var/namedFakier",\
-				  ListenIp	= "173.26.101.236"):
+				  ListenIp	= "",\
+				 ListenPort	= ""):
 	fp = open(FileName,'w+')
 	fp.write("options {\n")
-	fp.write("\tlisten-on port 53 { 127.0.0.1;%s; };\n" % ListenIp)
+	fp.write("\tlisten-on port %s { 127.0.0.1;%s; };\n" % (ListenPort,ListenIp))
 	fp.write("\tdirectory\t\t\t\"%s\";\n" % MainDir)
 	fp.write("\tdump-file\t\t\t\"data/cache_dump.db\";\n")
 	fp.write("\tstatistics-file\t\t\t\"data/named_stats.txt\";\n")
@@ -54,29 +57,59 @@ def File2GroupLists(FileName = "./config.in"):
 			ListSplit.setdefault(TLD,[])
 			ListSplit[TLD].append(item)
 #	print DebugInfo.print_dict_valueIslist(ListSplit)
+#	pprint.pprint(ListSplit)
 	return ListSplit
 
-def CreateKeys(ListSplitDict):
+def CreateCopyKeys(ListSplitDict):
 	KeySplit = {}
-	for keyitem in ListSplitDict.iterkeys():
-		zone = keyitem
-		if keyitem == "root":
-			zone = ""
-		cmd = "dnssec-keygen -f KSK -a RSASHA1 -b 512 -n ZONE %s." % zone
-		subKSK = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
-		subKSK.wait()
-		contentKSK = subKSK.stdout.read()
-		resoutKSK = re.findall(r"K\w*\.\+\d*\+\d*",contentKSK,re.MULTILINE)
-		KeySplit.setdefault(keyitem,[])
-		KeySplit[keyitem].append(resoutKSK[0])
+	
+	#---------->CreateKeys
+	cmd = "dnssec-keygen -f KSK -a RSASHA1 -b 512 -n ZONE base." 
+	subKSK = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
+	subKSK.wait()
+	contentKSK = subKSK.stdout.read()
+	resoutKSK = re.findall(r"K\w*\.\+\d*\+\d*",contentKSK,re.MULTILINE)
+#	pprint.pprint(resoutKSK)
 
-		cmd = "dnssec-keygen -a RSASHA1 -b 512 -n ZONE %s." % zone
-		subZSK = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
-		subZSK.wait()
-		contentZSK = subZSK.stdout.read()
-		resoutZSK = re.findall(r"K\w*\.\+\d*\+\d*",contentZSK,re.MULTILINE)
+	cmd = "dnssec-keygen -a RSASHA1 -b 512 -n ZONE base." 
+	subZSK = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
+	subZSK.wait()
+	contentZSK = subZSK.stdout.read()
+	resoutZSK = re.findall(r"K\w*\.\+\d*\+\d*",contentZSK,re.MULTILINE)
+#	pprint.pprint(resoutZSK)
+
+	for keyitem in ListSplitDict.iterkeys():
 		KeySplit.setdefault(keyitem,[])
-		KeySplit[keyitem].append(resoutZSK[0])
+		KeySplit[keyitem].append(re.sub(r"base",keyitem,resoutKSK[0]))
+		KeySplit[keyitem].append(re.sub(r"base",keyitem,resoutZSK[0]))
+#	pprint.pprint(KeySplit)
+
+	#---------->Copykeys
+	for keyitem in ListSplitDict.iterkeys():
+		for postfix in (".key",".private"):
+			for resout in (resoutKSK,resoutZSK):
+				fileBase = resout[0]+postfix
+				fileKeyitem = re.sub(r"base",keyitem,resout[0])+postfix
+				cmdstr = "cp ./%s ./%s" % (fileBase,fileKeyitem)
+				sub = subprocess.Popen(cmdstr, shell=True)
+				sub.wait()
+
+				if postfix == ".key":
+					f = open(fileKeyitem,'r')
+					seqlist = f.readlines()
+					f.close()
+					seqlist[0] = re.sub(r"base",keyitem,seqlist[0])
+					seqlist[-1] = re.sub(r"base",keyitem,seqlist[-1])
+					f = open(fileKeyitem,'w')
+					f.writelines(seqlist)
+					f.close()
+
+#				print fileBase
+#				print fileKeyitem
+	cmdDelete = "rm ./Kbase.*"
+	sub = subprocess.Popen(cmdDelete, shell = True)
+	sub.wait()
+				
 	return KeySplit
 
 def CreateDBFile(GroupDict,KeyDict):
@@ -101,27 +134,20 @@ def CreateDBFile(GroupDict,KeyDict):
 		for j in KeyDict[keyname]:
 			fp.write("$INCLUDE \"%s.key\"\n" % j)
 		fp.close()
-	#------->Add DS RECORD
-	fp = open("./root.db",'a+')
-	for keyname in GroupDict.iterkeys():
-		if keyname == "root":
-			continue
-		else:
-			fp.write("$INCLUDE \"dsset-%s.\"\n" % keyname)
-	fp.close()
+#	#------->Add DS RECORD
+#	fp = open("./root.db",'a+')
+#	for keyname in GroupDict.iterkeys():
+#		if keyname == "root":
+#			continue
+#		else:
+#			fp.write("$INCLUDE \"dsset-%s.\"\n" % keyname)
+#	fp.close()
 
 	#------->SIGN ZONE(root zone must be the last to sign!)
 	for keyname in GroupDict.iterkeys():
-		if keyname == "root":
-			continue
-		else:
-			cmd = "dnssec-signzone -o %s. %s.db" % (keyname,keyname)
-			print cmd
-			sub = subprocess.Popen(cmd, shell=True)
-			sub.wait()
-	cmd = "dnssec-signzone -o . root.db"
-	subroot = subprocess.Popen(cmd, shell=True)
-	subroot.wait()
+		cmd = "dnssec-signzone -o %s. %s.db" % (keyname,keyname)
+		sub = subprocess.Popen(cmd, shell=True)
+		sub.wait()
 
 def MoveFile(DBpath):
 	cmd = "mv *.key *.private *.db *.signed *. %s" % DBpath
@@ -139,7 +165,8 @@ def CreateMultiZone(GroupDict):
 		CreateZone("%s." % zone, "%s.db.signed" % name)
 
 def ExportTrustedKey(DBpath,Keydict):
-	keyFileName = Keydict["root"][0]
+	keyName = KeyDict.keys()[0]
+	keyFileName = Keydict[keyName][0]
 	fpr = open("%s/%s.key" % (DBpath, keyFileName),'r')
 	linelist = fpr.readlines()
 	fpw = open("%s/trusted-key.key" % DBpath, 'w')
@@ -164,11 +191,11 @@ if __name__ == "__main__":
 	init(DBPath)
 
 	GroupDict = File2GroupLists()
-	CreateOptions(MainDir = DBPath, ListenIp = BindIp)
+	CreateOptions(MainDir = DBPath, ListenIp = BindIp,ListenPort = BindPort)
 	CreateLogging()
 	CreateMultiZone(GroupDict)
 
-	KeyDict = CreateKeys(GroupDict)
+	KeyDict = CreateCopyKeys(GroupDict)
 	CreateDBFile(GroupDict,KeyDict)
 
 	MoveFile(DBPath)
