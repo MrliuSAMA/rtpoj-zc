@@ -1,0 +1,12 @@
+cn.	172800	IN	NS	a.dns.cn.
+cn.	172800	IN	NS	b.dns.cn.
+cn.	172800	IN	NS	c.dns.cn.
+cn.	172800	IN	NS	d.dns.cn.
+cn.	172800	IN	NS	e.dns.cn.
+cn.	172800	IN	NS	ns.cernet.net.
+a.dns.cn.	172800	IN	A	203.119.25.1
+b.dns.cn.	172800	IN	A	203.119.26.1
+c.dns.cn.	172800	IN	A	203.119.27.1
+d.dns.cn.	172800	IN	A	203.119.28.1
+e.dns.cn.	172800	IN	A	203.119.29.1
+ns.cernet.net.	172800	IN	A	202.112.0.44

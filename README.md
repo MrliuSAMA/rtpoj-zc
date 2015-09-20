@@ -2,7 +2,7 @@
 
 #####Zone Communication-v0.1.8  
 
-##客户端
+##客户端  
 
 ###ChkRR.py
 
@@ -42,9 +42,14 @@
 
 
 ##服务器端  
+<<<<<<< HEAD
   
 ###AutoConfig.py
 
+=======
+
+	* AutoConfig.py  
+>>>>>>> 170dc5a22c9873543bf7090b20cd3a3b293dd84b
 自动化的配置服务器，生成用于在bind上发布数据时使用的ZSK,KSK,ZoneDB,ZONESignedDB,NamedConf文件  
 >调用  
 >  

@@ -4,36 +4,61 @@ import sys
 import subprocess
 import DebugInfo
 import FindCheck
-glo_dst = "127.0.0.1"
+import pprint
+import re
+
 debug = 0
 version = "0.1"
 
-def p_usage():
+def PrintUsage():
 	print "\n\n\t\tCheck RRsets Tools"+"[version %s]\t\t\n" % version 
-	print "\tusage example:","chkrr -d xxx.xxx.xxx.xxx com. NS\n"
-	print "\tusage: check [-hv] [-d query dst]\n"
-	print "\t-h/--help : print help usage"
-	print "\t-v : show version"
-	print "\t-d : query target"
+	print "usage: chkrr\t[-v version][-f=file_path filemode][-h help manual]"
+	print "\t\t[-D debug info][-d short debug info][-l log record]"
+	print "\t\t[-t=dst_ip query target][-p=dst_port query target]"
+	print "Name *Class Type"
+	print "\n"
+	print "The most commonly used git commands are:"
+	print "   -v\t Show current version of program"
+	print "   -t\t Decide where the DNS query will be send to"
+	print "   --help\t"
+	print "   -h\t Show the help manual of program"
+	print "   -d\t Show brief debug info to debuger"
+	print "   -D\t Show detailed debug info to debuger"
+	print "   -l\t Recording log to file,log will write each query&answer"
+	print "   -f\t Batch mode,lunch multi items in file."
+	print "   \t cautions! Batchmode will ignore args except -l"
+	print "\n"
+	print "Some usage tips, maybe it will helps:"
+	print "   1.  chkrr cn. NS -t 127.0.0.1"
+	print "   2.  chkrr cn. IN NS -t 127.0.0.1"
+	print "   3.  chkrr cn. NS -t 127.0.0.1 -d"
+	print "   4.  chkrr cn. NS -t 127.0.0.1 -D"
+	print "   5.  chkrr -f ./queryfile.in"
+	print "   6.  chkrr -f ./queryfile.in -l"
+	print "\n"	
 
-def p_version():
+
+def PrintVersion():
 	print version
 
 
-
-def add_result(list):
-	res1 = re.search("SUCCESS", list[-1])
+def VerifyResult(list):
+	res1 = re.search("SUCCESS", list[-1][-1])
 	if res1 != None:
-		print "DNSSEC validation SUCCESS"
-		return 0
-	res2 = re.search("FAILED", list[-1])
+		return "Verifyed"
+	res2 = re.search("FAILED", list[-1][-1])
 	if res2 != None:
-		print "DNSSEC validation FAILED"
-		return -1
+		return "Unpassed"
 
 
-
-def split2block(total):
+def ExtractAnswer(list):
+	result = []
+	for i in list[0]:
+		result.append(i.strip().split())
+	
+	return result[1:]
+		
+def SplitToBlock(total):
 	total.append('\n')
 	split_list = []
 	lastsplit = -1
@@ -46,150 +71,115 @@ def split2block(total):
 				continue
 			split_list.append(total[lastsplit+1:num])
 			lastsplit = num
+
 	return split_list
 
 
-
-def cut_oneline(total):
-	split_list = []
-	for num in range(len(total)):
-		res = len(total[num])
-		if res == 1:
-			continue
-		if res > 1:
-			split_list.append(total[num])
-	return split_list
-
-
-
-#run a proc means a fetch and a total verify for one DNS query 
-def proc(name, types, dst, keypath):
-	cmd = "dig @%s %s %s +sigchase +trusted-key=%s" % (dst,name,types,keypath)
-	if debug:	
-		print cmd
+def Proc(Name, Type, Dst, DstPort, KeyPath, DetailDebug=0, ShortDebug=0):
+	cmd = "dig @%s %s %s -p %s +sigchase +trusted-key=%s" % (Dst,Name,Type,DstPort,KeyPath)
+	if DetailDebug:
+		print "|%s debug info start %s|" % ('-'*15,'-'*15)
+		cmdseq = "%s | cat -n" % cmd
+		getdetail = subprocess.Popen(cmdseq, shell=True, stdout=subprocess.PIPE)
+		getdetail.wait()
+		print getdetail.stdout.read()
+		print "|%s debug info end   %s|" % ('-'*15,'-'*15)
+	elif ShortDebug:
+		print "|%s debug info start %s|" % ('-'*15,'-'*15)
+		cmdseq = "drill @%s %s %s -S -k %s -p %s" % (Dst,Name,Type,KeyPath,DstPort)
+		getdetail = subprocess.Popen(cmdseq, shell=True, stdout=subprocess.PIPE)
+		getdetail.wait()
+		print getdetail.stdout.read()
+		print "|%s debug info end   %s|" % ('-'*15,'-'*15)
+	else:
+		pass
 	sub=subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
 	sub.wait()
-	linelist = sub.stdout.readlines()
-	blocks = split2block(linelist)
-	semantic_list = cut_oneline(blocks)
+	lLineList = sub.stdout.readlines()
+	lBlocks = SplitToBlock(lLineList)
+	sStatus = VerifyResult(lBlocks)
+	lAnswer = ExtractAnswer(lBlocks)
+	pprint.pprint(lAnswer)
 	
-	if debug:
-		DebugInfo.print_list(semantic_list)
-	
-	recursive = 0
-	cur_number = 0
-	response,cur_number,verify_result = find_And_check(name, types, semantic_list, cur_number, recursive)
-	recursive = recursive+1
-	if name != ".":				#dot means we don't need a recursive verify
-		if recursive != 0:		#recursive verify start with DS record
-			find_And_check(".","DS",semantic_list,cur_number,recursive)
-	return response,verify_result
+	return sStatus,lAnswer
 
 
-
-#run a find_And_check means a partical verify for a DNS query
-def find_And_check(name, types, semantic_list, start_seqno, recursive_flag):
-	seq = start_seqno
-	end_seqno = 0
-	name_zone = name.split('.')[-2]+'.'
-	result = []
-	if recursive_flag == 0:
-		result = FindCheck.find_rrset_query(semantic_list[seq], name_zone)
-		seq = seq+1
-		FindCheck.find_rrsig_rrset(semantic_list[seq], name_zone)
-		seq = seq+1
-	FindCheck.find_rrset_dnskey(semantic_list[seq], name_zone)
-	seq = seq+1
-	FindCheck.find_rrsig_dnskey(semantic_list[seq], name_zone)
-	seq = seq+1
-	rcode = FindCheck.find_rrset_ds(semantic_list[seq],name_zone)
-	seq = seq+1
-	if rcode == 0:
-		FindCheck.find_rrsig_ds(semantic_list[seq],name_zone)
-		seq = seq+1
-		FindCheck.check(semantic_list[seq],name,name_zone,types,recursive_flag)
-		seq = seq+1
-	if rcode == -1:
-		FindCheck.check(semantic_list[seq],name,name_zone,types,recursive_flag)
-		seq = seq+1
-	end_seqno = seq
-
-	if recursive_flag == 0:
-		DebugInfo.print_result(name, types, result)
-
-	return result,end_seqno,0
-
-
-
-def proc_file(filepath):
-	file = open(filepath, 'r')
-	outputfile = filepath.strip().split('/')[-1].split('.')[-2]+".out"
-	file_res = open(outputfile, 'w')
-
-	querys = file.readlines()
-	for oneline in querys:
-		cmd = oneline.strip().split()
-		res,status = proc(cmd[0],cmd[1],cmd[2],cmd[3])
-		if status == 0:
-			status = "verify_OK"
-		else:
-			status = "verify_NO"			
-		for every_answer in res:
-			file_res.write("%s\t%s\t%s\t%s\t%s\n" % (cmd[0],cmd[1],cmd[2],every_answer,status))
-		file_res.close()
-
-		file_res = open(outputfile, 'a')
-		for every_answer in res:
-			res_A,status_A = proc(every_answer,'A',cmd[2],cmd[3])
-			if status_A == 0:
-				status_A = "verify_OK"
-			else:
-				status_A = "verify_NO"
-			for items in res_A:
-				file_res.write("%s\t%s\t%s\t%s\t%s\n" % (every_answer,'A',cmd[2],items,status_A))
-
-	file.close()
-	file_res.close()
-
+def ProcFile(BatchPath):
+	outputFileName = BatchPath.strip().split('/')[-1].split('.')[-2]+".out"
+	fileIn = open(BatchPath, 'r')
+	fileOut = open(outputFileName, 'w')
+	lQuery = fileIn.readlines()
+	for eachline in lQuery:
+		item = eachline.strip().split()
+		sStatusNS,lAnswerNS = Proc(item[0],item[1],item[2],item[3],item[4])
+#		print lAnswerNS
+		for k in lAnswerNS:
+			fileOut.write("%s\t%s\t%s\t%s\t%s\n" % (k[0],k[1],k[2],k[3],k[4]))
+		for i in lAnswerNS:
+			sStatusA,lAnswerA = Proc(i[4],'A',item[2],item[3],item[4])
+			for j in lAnswerA:
+				fileOut.write("%s\t%s\t%s\t%s\t%s\n" % (j[0],j[1],j[2],j[3],j[4]))
+	fileIn.close()
+	fileOut.close()
 
 
 def main(argv):
-	noglo_dst	= "127.0.0.1"
-	name		= "null"
-	types		= "null"
-	filepath	= "./queryfile.in"
+	print argv
+	Dst			= "127.0.0.1"
+	DstPort		= "53"
+	Name		= "."
+	Type		= "NS"
+	FilePath	= "null"
+	ShortDebug	= 0
+	DetailDebug = 0
+	LogPath		= "null"
+	BatchPath	= "null"
+	KeyPath		= "/var/namedFaker/trusted-key.key"
 	try:
-		opts,args = getopt.getopt(argv[1:], "hvd:f:", ["help"])
+		opts,args = getopt.getopt(argv[1:], "hvdDt:p:l:f:k:", ["help"])
 	except getopt.GetoptError,info:
 		print info.msg
-		p_usage()
+		PrintUsage()
 		sys.exit()
-	for o,a in opts:
-		if o in ('-h',"--help"):
-			p_usage()
+	for option,value in opts:
+		if option in ('-h',"--help"):
+			PrintUsage()
 			return 0
-		elif o in ('-d'):
-			noglo_dst = a
-		elif o in ('-v'):
-			p_version()
+		elif option in ('-v'):
+			PrintVersion()
 			return 0
-		elif f in ('-f'):
-			filepath = a
+		elif option in ('-d'):
+			ShortDebug = 1
+		elif option in ('-D'):
+			DetailDebug = 1
+		elif option in ('-t'):
+			Dst = value
+		elif option in ('-p'):
+			DstPort = value
+		elif option in ('-l'):
+			LogPath = value
+		elif option in ('-f'):
+			BatchPath = value
+		elif option in ('-k'):
+			Keypath = value
 		else:
 			p_usage()
 			sys.exit()
 	if len(args) == 3:
-		name = args[0]
-		types = args[2]
-	if len(args) == 2:
-		name = args[0]
-		types = args[1]
+		Name = args[0]
+		Type = args[2]
+	elif len(args) == 2:
+		Name = args[0]
+		Type = args[1]
+	elif len(args) <2:
+		if BatchPath == "null":
+			PrintUsage()
+			return 0
 
-	if filepath == "null":
-		proc(name, types, noglo_dst, keypath)
+	if BatchPath == "null":
+		Proc(Name, Type, Dst, DstPort, KeyPath, DetailDebug,ShortDebug)
 	else:
-		proc_file(filepath)
-
+		ProcFile(BatchPath)
 
 
 if __name__ == "__main__":
