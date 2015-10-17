@@ -4,19 +4,79 @@ import re
 import os
 import pprint
 
+#file path configure
 DBPath = "/var/namedFaker"
-ConfigPath = "/etc"
+ConfigureFile = "/etc"
+
+#input&output
+DataFile = "./DataOrigin.in"
+
+#option configure
 BindIp = "173.26.101.233"
 BindPort = "53"
+ZoneName = "cn"
 
-def CreateOptions(FileName	= "./named.conf",\
-				  MainDir	= "/var/namedFakier",\
-				  ListenIp	= "",\
-				 ListenPort	= ""):
-	fp = open(FileName,'w+')
+#virtual info config [if no special ,pls don't change configure below]
+VirtualIp = "1.1.1.1"
+VirtualName = "a.virtual"
+
+
+
+
+
+
+def File2GroupLists(FileName = DataFile):
+	TLDList = []
+	ListSplit = {}
+	fp = open(FileName, 'r')
+	RRLists = fp.readlines()
+	for item in RRLists:
+		TLD = item.strip().split()[0].split('.')[-2].lower()
+		if TLD == "":
+			ListSplit.setdefault(".",[])
+			ListSplit["."].append(item)
+		else:
+			ListSplit.setdefault(TLD,[])
+			ListSplit[TLD].append(item)
+#	pprint.pprint(ListSplit)
+	fp.close()
+	return ListSplit
+
+def AddVirtualTld2File(FileName = DataFile):
+	TLDList = []
+	fp = open(FileName, 'r')
+	RRLists = fp.readlines()
+	for item in RRLists:
+		TLD = item.strip().split()[0].split('.')[-2]
+		print TLD
+		if TLD.lower() == ZoneName or TLD=="":
+		#CN. or cn. all mains cnTLD | . means root,don't need add tld'
+			pass
+		else:
+			TLDList.append(TLD)
+	fp.close()
+	
+	fp = open(FileName, 'a')
+	TLDNoRedundancy = [i for i in set(TLDList)]
+	for TLDName in TLDNoRedundancy:
+		str1 = "%s.\t\t\t172800\tIN\tNS\t%s.%s.\n" % (TLDName,VirtualName,TLDName)
+		str2 = "%s.%s.\t172800\tIN\tA\t%s\n" % (VirtualName,TLDName,VirtualIp)
+		fp.write(str1)
+		fp.write(str2)
+	
+	#ADD root
+	fp.write(".\t\t\t172800\tIN\tNS\ta.root-servers.net\n")
+	fp.write("a.root-servers.net\t172800\tIN\tA\t1.1.1.1\n")
+	fp.close()
+
+def CreateOptions(ConfigureFileName	= "./named.conf",	\
+				  DataFileDir	= "/var/namedFaker",	\
+				  ListenIp	= "dummy",	\
+				  ListenPort	= "dummy"):
+	fp = open(ConfigureFileName,'w+')
 	fp.write("options {\n")
 	fp.write("\tlisten-on port %s { 127.0.0.1;%s; };\n" % (ListenPort,ListenIp))
-	fp.write("\tdirectory\t\t\t\"%s\";\n" % MainDir)
+	fp.write("\tdirectory\t\t\t\"%s\";\n" % DataFileDir)
 	fp.write("\tdump-file\t\t\t\"data/cache_dump.db\";\n")
 	fp.write("\tstatistics-file\t\t\t\"data/named_stats.txt\";\n")
 	fp.write("\tmemstatistics-file\t\t\"data/named_mem_stats.txt\";\n")
@@ -36,34 +96,26 @@ def CreateLogging(FileName  = "./named.conf"):
 	fp.write("\t\t};\n};\n\n")
 	fp.close()
 
-
 def CreateZone(ZoneName,ZonePath,FileName = "./named.conf"):
 	fp = open(FileName,'a+')
 	fp.write("zone \"%s\" IN {\n\ttype master;\n\tfile \"%s\";\n};\n\n" %\
 			(ZoneName,ZonePath))
 	fp.close()
 
-def File2GroupLists(FileName = "./config.in"):
-	TLDList = []
-	ListSplit = {}
-	fp = open(FileName, 'r')
-	RRLists = fp.readlines()
-	for item in RRLists:
-		TLD = item.strip().split()[0].split('.')[-2]
-		if TLD == "":
-			ListSplit.setdefault("root",[])
-			ListSplit["root"].append(item)
-		else:
-			ListSplit.setdefault(TLD,[])
-			ListSplit[TLD].append(item)
-#	print DebugInfo.print_dict_valueIslist(ListSplit)
-#	pprint.pprint(ListSplit)
-	return ListSplit
+def CreateMultiZone(GroupDict):
+	for name in GroupDict.iterkeys():
+		zone = name
+		if zone == ".":
+			zone = ""
+		CreateZone("%s." % zone, "%s.db.signed" % name)
+
+
+
+
 
 def CreateCopyKeys(ListSplitDict):
 	KeySplit = {}
-	
-	#---------->CreateKeys
+#---------------->CreateKeys
 	cmd = "dnssec-keygen -f KSK -a RSASHA1 -b 512 -n ZONE base." 
 	subKSK = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
 	subKSK.wait()
@@ -84,7 +136,7 @@ def CreateCopyKeys(ListSplitDict):
 		KeySplit[keyitem].append(re.sub(r"base",keyitem,resoutZSK[0]))
 #	pprint.pprint(KeySplit)
 
-	#---------->Copykeys
+#--------------->Copykeys
 	for keyitem in ListSplitDict.iterkeys():
 		for postfix in (".key",".private"):
 			for resout in (resoutKSK,resoutZSK):
@@ -103,7 +155,6 @@ def CreateCopyKeys(ListSplitDict):
 					f = open(fileKeyitem,'w')
 					f.writelines(seqlist)
 					f.close()
-
 #				print fileBase
 #				print fileKeyitem
 	cmdDelete = "rm ./Kbase.*"
@@ -111,6 +162,8 @@ def CreateCopyKeys(ListSplitDict):
 	sub.wait()
 				
 	return KeySplit
+
+
 
 def CreateDBFile(GroupDict,KeyDict):
 	#------->ADD DNSRR RECORD & KSK ZSK
@@ -134,20 +187,22 @@ def CreateDBFile(GroupDict,KeyDict):
 		for j in KeyDict[keyname]:
 			fp.write("$INCLUDE \"%s.key\"\n" % j)
 		fp.close()
-#	#------->Add DS RECORD
-#	fp = open("./root.db",'a+')
-#	for keyname in GroupDict.iterkeys():
-#		if keyname == "root":
-#			continue
-#		else:
-#			fp.write("$INCLUDE \"dsset-%s.\"\n" % keyname)
-#	fp.close()
-
-	#------->SIGN ZONE(root zone must be the last to sign!)
+#	#------->Add DS RECORD										#
+#	fp = open("./root.db",'a+')									#
+#	for keyname in GroupDict.iterkeys():						#
+#		if keyname == "root":									#
+#			continue											#
+#		else:													#
+#			fp.write("$INCLUDE \"dsset-%s.\"\n" % keyname)		#
+#	fp.close()													#
+#																#
+#	#------->SIGN ZONE(root zone must be the last to sign!)		#
 	for keyname in GroupDict.iterkeys():
 		cmd = "dnssec-signzone -o %s. %s.db" % (keyname,keyname)
 		sub = subprocess.Popen(cmd, shell=True)
 		sub.wait()
+
+
 
 def MoveFile(DBpath):
 	cmd = "mv *.key *.private *.db *.signed *. %s" % DBpath
@@ -157,12 +212,7 @@ def MoveFile(DBpath):
 	sub = subprocess.Popen(cmd, shell=True)
 	sub.wait()
 
-def CreateMultiZone(GroupDict):
-	for name in GroupDict.iterkeys():
-		zone = name
-		if zone == "root":
-			zone = ""
-		CreateZone("%s." % zone, "%s.db.signed" % name)
+
 
 def ExportTrustedKey(DBpath,Keydict):
 	keyName = KeyDict.keys()[0]
@@ -173,6 +223,8 @@ def ExportTrustedKey(DBpath,Keydict):
 	fpw.write(linelist[-1])
 	fpr.close()
 	fpw.close()
+
+
 
 def init(Path):
 	res = os.path.exists(Path)
@@ -190,16 +242,21 @@ def init(Path):
 if __name__ == "__main__":
 	init(DBPath)
 
+	AddVirtualTld2File()
 	GroupDict = File2GroupLists()
-	CreateOptions(MainDir = DBPath, ListenIp = BindIp,ListenPort = BindPort)
-	CreateLogging()
-	CreateMultiZone(GroupDict)
+	print "---------------->"
+	pprint.pprint(GroupDict)
+	print "---------------->"
+#	pprint.pprint(GroupDict)
+#	CreateOptions(DataFileDir = DBPath, ListenIp = BindIp,ListenPort = BindPort)
+#	CreateLogging()
+#	CreateMultiZone(GroupDict)
 
-	KeyDict = CreateCopyKeys(GroupDict)
-	CreateDBFile(GroupDict,KeyDict)
+#	KeyDict = CreateCopyKeys(GroupDict)
+#	CreateDBFile(GroupDict,KeyDict)
 
-	MoveFile(DBPath)
-	ExportTrustedKey(DBPath,KeyDict)
+#	MoveFile(DBPath)
+#	ExportTrustedKey(DBPath,KeyDict)
 
 
 
