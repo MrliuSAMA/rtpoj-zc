@@ -5,7 +5,7 @@ def CreateConfigureFromDB():
 		conn=MySQLdb.connect(   host='localhost',	\
 								user='root',		\
 								passwd='liu',		\
-								db='configuration',		\
+								db='configuration',	\
 								port=3306)
 		cur=conn.cursor()
 		resnum = cur.execute('select * from zc_client')
