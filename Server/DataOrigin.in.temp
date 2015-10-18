@@ -25,3 +25,9 @@ j.dns.cn.		172800	IN	A	125.208.34.1
 k.dns.cn.		172800	IN	A	125.208.35.1
 l.dns.cn.		172800	IN	A	125.208.36.1
 CN.			86400	IN	DS	24697 8 2 A8BD8346D72C8C08FCE76D85298A8D58025323487122C5354D6E34AD857498E3
+net.			172800	IN	NS	a.virtual.net.
+a.virtual.net.	172800	IN	A	1.1.1.1
+cn.			172800	IN	NS	a.virtual.cn.
+a.virtual.cn.	172800	IN	A	1.1.1.1
+.			172800	IN	NS	a.virtual.
+a.virtual.	172800	IN	A	1.1.1.1
