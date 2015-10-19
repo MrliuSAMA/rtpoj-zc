@@ -1,8 +1,6 @@
 period			=		60
-OutputName		=		root.zone.exchange
+OutputName		=		root.zone.exchangedata
 Prefix			=		/var/ZoneExchange/
 BackupFilePath	=		Data/ZoneExchangeBak/
-CurFilePath		=		Data/ZoneExchange/
-DataOriginFile	=		./queryfile.in					
-LogPath			=		Log/ZoneExchange/					
-
+CurFilePath		=		Data/ZoneExchange/									
+DataOriginFile	=		./Query.in
