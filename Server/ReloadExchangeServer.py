@@ -1,3 +1,4 @@
+#coding=utf-8
 import pprint
 import subprocess
 import re
@@ -6,25 +7,34 @@ import logging
 import socket
 import fcntl
 import struct
+import getopt
+import sys
 
 
 #file path configure
-DBPath = "dummy"
-ConfigurePath = "dummy"
+DBPath = "/var/named/exchange-data"
+ConfigurePath = "/etc"
 
 #input&output
-DataFile = "dummy"
+DataFile = "./ZoneExchangeData.in"
 
 #option configure
-BindIp = "dummy"
-BindPort = "dummy"
+BindIp = "127.0.0.1"
+BindPort = "53"
 ZoneName = "dummy"
 
 #virtual info config [if no special ,pls don't change configure below]
 VirtualIp = "1.1.1.1"
 VirtualName = "a.virtual"
 
+#####
+PREFIX = "/opt/RootZoneExchangeServer/"
 
+os.chdir(PREFIX+'test/');
+
+#	使输入的数据符合BIND的发布逻辑，虚拟一些顶级域节点，虚拟的顶级域节点IP地址可以任意填写，
+#	因为发布该数据的服务器同时负责根节点和顶级域节点。对内十负责多个区的权威服务器，
+#	对外可看做一台递归服务器。
 def AddVirtualTld2File(FileName = DataFile):
 	TLDList = []
 	ReturnTLD = [".",]
@@ -44,14 +54,26 @@ def AddVirtualTld2File(FileName = DataFile):
 	fp.close()
 	logging.debug(pprint.pprint(TLDList))
 
-	fp = open(FileName, 'a')
+	#复制一个新的临时文件，新的文件添加上用于辅助BIND逻辑的虚拟节点信息
+	templist = FileName.split('.')
+	templist.append("temp")
+	NewFileName = '.'.join(templist)
+	global DataFile
+	DataFile = NewFileName
+	cmd = "cp %s %s" % (FileName, NewFileName)
+	sub = subprocess.Popen(cmd, shell=True)
+	sub.wait()	
+
+	#添加额外的虚拟顶级域节点信息
+	fp = open(NewFileName, 'a')
 	TLDNoRedundancy = [i for i in set(TLDList)]
 	for TLDName in TLDNoRedundancy:
 		str1 = "%s.\t\t\t172800\tIN\tNS\t%s.%s.\n" % (TLDName,VirtualName,TLDName)
 		str2 = "%s.%s.\t172800\tIN\tA\t%s\n" % (VirtualName,TLDName,VirtualIp)
 		fp.write(str1)
-		fp.write(str2)	
-	#ADD root
+		fp.write(str2)
+	
+	#添加额外的虚拟跟区节点信息
 	fp.write(".\t\t\t172800\tIN\tNS\ta.virtual.\n")
 	fp.write("a.virtual.\t172800\tIN\tA\t1.1.1.1\n")
 	fp.close()
@@ -59,17 +81,19 @@ def AddVirtualTld2File(FileName = DataFile):
 	return [i for i in set(ReturnTLD)]
 
 
+
+#	将原始数据文件分割成不同区的区文件
 def CreateZoneFile(TLDList,FileName = DataFile):
 	logging.debug(pprint.pprint(TLDList))
 	DividedItem = {}
 	fp = open(DataFile)
 	Lines = fp.readlines()
-	for j in Lines:			
+	for j in Lines:
+		#为根的区文件添加条目			
 		if j.strip().split()[3] == "DS":
 			DividedItem.setdefault(".",[])
 			DividedItem["."].append(j)
-			continue
- 				
+			continue				
 		if "virtual" in j.strip().split()[0]:
 			DividedItem.setdefault(".",[])
 			DividedItem["."].append(j)
@@ -79,12 +103,15 @@ def CreateZoneFile(TLDList,FileName = DataFile):
 		else:
 			pass
 		
+		#为顶级域的区文件添加条目
 		tld = j.strip().split()[0].split('.')[-2]
 		judge = j.strip().split()[0]+j.strip().split()[-1]					 
 		if tld in TLDList and tld == ZoneName and "virtual" not in judge:
+			#此规则意味着cn.可以添加到cnTLD，virtual.cn不可以添加到cnTLD中
 			DividedItem.setdefault(tld,[])
 			DividedItem[tld].append(j)
 		elif tld in TLDList and tld != ZoneName:
+			#除上述特殊的顶级域以外，其他的顶级域域名放到顶级域对应的区文件中
 			DividedItem.setdefault(tld,[])
 			DividedItem[tld].append(j)
 		else:
@@ -92,7 +119,8 @@ def CreateZoneFile(TLDList,FileName = DataFile):
 
 	fp.close()		
 	logging.debug(pprint.pprint(DividedItem))
-				
+	
+	#填写正确的SOA记录			
 	DataFileName = []
 	name = "dummy"
 	SOA4 = "dummy"
@@ -124,22 +152,22 @@ def CreateZoneFile(TLDList,FileName = DataFile):
 
 
 
-def KeyGenerate(TLDList):		
+#	生成负责不同顶级域的，密钥值相同的key
+def KeyGenerate(TLDList,KeyIDFile):	
+	print "###############################################################"	
 	KeySplit = {}
-#---------------->CreateKeys
-	cmd = "dnssec-keygen -f KSK -a RSASHA1 -b 512 -n ZONE base." 
-	subKSK = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
-	subKSK.wait()
-	contentKSK = subKSK.stdout.read()
-	resoutKSK = re.findall(r"K\w*\.\+\d*\+\d*",contentKSK,re.MULTILINE)
-#	pprint.pprint(resoutKSK)
+	resoutKSK = []
+	resoutZSK = []
 
-	cmd = "dnssec-keygen -a RSASHA1 -b 512 -n ZONE base." 
-	subZSK = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
-	subZSK.wait()
-	contentZSK = subZSK.stdout.read()
-	resoutZSK = re.findall(r"K\w*\.\+\d*\+\d*",contentZSK,re.MULTILINE)
-#	pprint.pprint(resoutZSK)
+	#------------>read previous key
+	if KeyIDFile== 1:
+		f = open(PREFIX+"test/CurrentKeyID")
+		lines = f.readlines()
+		resoutKSK.append(lines[0].strip().split()[-1])
+		resoutZSK.append(lines[1].strip().split()[-1])
+	else:
+		print "NoKey defined exit!"
+		exit()
 
 	for keyitem in TLDList:
 		if keyitem == '.':
@@ -148,9 +176,10 @@ def KeyGenerate(TLDList):
 		KeySplit.setdefault(Keyitemdot,[])
 		KeySplit[Keyitemdot].append(re.sub(r"base",keyitem,resoutKSK[0]))
 		KeySplit[Keyitemdot].append(re.sub(r"base",keyitem,resoutZSK[0]))
-#	pprint.pprint(KeySplit)
 
-#--------------->Copykeys
+
+	
+	#------------>Copykeys
 	for keyitem in TLDList:
 		if keyitem == '.':
 			keyitem = ''
@@ -159,9 +188,14 @@ def KeyGenerate(TLDList):
 				fileBase = resout[0]+postfix
 				fileKeyitem = re.sub(r"base",keyitem,resout[0])+postfix
 				print fileKeyitem
-				cmdstr = "cp ./%s ./%s" % (fileBase,fileKeyitem)
-				sub = subprocess.Popen(cmdstr, shell=True)
-				sub.wait()
+				if KeyIDFile == 0:
+					cmdstr = "cp ./%s ./%s" % (fileBase,fileKeyitem)
+					sub = subprocess.Popen(cmdstr, shell=True)
+					sub.wait()
+				else:
+					cmdstr = "cp ./KeyBase/%s ./%s" % (fileBase,fileKeyitem)
+					sub = subprocess.Popen(cmdstr, shell=True)
+					sub.wait()
 
 				if postfix == ".key":
 					f = open(fileKeyitem,'r')
@@ -172,15 +206,15 @@ def KeyGenerate(TLDList):
 					f = open(fileKeyitem,'w')
 					f.writelines(seqlist)
 					f.close()
-#				print fileBase
-#				print fileKeyitem
-	cmdDelete = "rm ./Kbase.*"
-	sub = subprocess.Popen(cmdDelete, shell = True)
-	sub.wait()
+	
+
 				
 	pprint.pprint(KeySplit)
 	return KeySplit		
 			
+
+
+#	为每个区的数据文件使用DNSSEC签名
 def SignDBfile(KeyDict):
 	filename = "dummy"
 	for i in KeyDict.iterkeys():
@@ -204,57 +238,26 @@ def SignDBfile(KeyDict):
 		sub = subprocess.Popen(cmd, shell=True)
 		sub.wait()	
 
-def CreateOptions(ConfigureFileName	= "./named.conf",	\
-				  DataFileDir	= "dummy",	\
-				  BindIp	= "dummy",		\
-				  BindPort	= "dummy"):
-	fp = open(ConfigureFileName,'w+')
-	fp.write("options {\n")
-	fp.write("\tlisten-on port %s { 127.0.0.1;%s; };\n" % (BindPort,BindIp))
-	fp.write("\tdirectory\t\t\t\"%s\";\n" % DataFileDir)
-	fp.write("\tdump-file\t\t\t\"data/cache_dump.db\";\n")
-	fp.write("\tstatistics-file\t\t\t\"data/named_stats.txt\";\n")
-	fp.write("\tmemstatistics-file\t\t\"data/named_mem_stats.txt\";\n")
-	fp.write("\tallow-query	{ any; };\n")
-	fp.write("\trecursion no;\n")
-	fp.write("\tdnssec-enable yes;\n")
-	fp.write("};\n\n")
-	fp.close()
-
-def CreateLogging(FileName  = "./named.conf"):
-	fp = open(FileName,'a+')
-	fp.write("logging {\n")
-	fp.write("\tchannel default_debug {\n")
-	fp.write("\t\tfile \"data/named.run\";\n")
-	fp.write("\t\tseverity dynamic;\n")
-	fp.write("\t\t};\n};\n\n")
-	fp.close()
-
-def CreateZone(ZoneName,ZonePath,FileName = "./named.conf"):
-	fp = open(FileName,'a+')
-	fp.write("zone \"%s\" IN {\n\ttype master;\n\tfile \"%s\";\n};\n\n" %\
-			(ZoneName,ZonePath))
-	fp.close()
-
-def CreateMultiZone(TLDList):
-	for name in TLDList:
-		zone = name
-		if zone == ".":
-			zone = ""
-			name = "root"
-		CreateZone("%s." % zone, "%s.db.signed" % name)
 
 
-def MoveFile(DBPath = "/var/namedFaker", ConfigurePath = "/etc"):
-	cmd = "mv *.key *.private *.db *.signed *. %s" % DBPath
-	sub = subprocess.Popen(cmd, shell=True)
-	sub.wait()
-	cmd = "mv -b *.conf %s" % ConfigurePath
+#	将文件移动到目录所指定的位置
+def MoveFile(DBPath = "/var/named/exchange-data", ConfigurePath = "/etc"):
+	if os.listdir(DBPath) == []:
+		print 11111
+		pass
+	else:
+		print 22222
+		cmd = "rm -f %s/*.*" % DBPath
+		sub = subprocess.Popen(cmd, shell=True)
+		sub.wait()
+		 
+	cmd = "sudo mv *.key *.private *.db *.signed *. %s" % DBPath
 	sub = subprocess.Popen(cmd, shell=True)
 	sub.wait()
 
+
+#	导出客户端需要使用的公钥
 def ExportTrustedKey(Keydict, DBfilepath = DBPath):
-#	keyName = KeyDict.keys()[0]
 	keyName = ZoneName+'.'
 	keyFileName = Keydict[keyName][0]
 	fpr = open("%s/%s.key" % (DBfilepath, keyFileName),'r')
@@ -264,6 +267,8 @@ def ExportTrustedKey(Keydict, DBfilepath = DBPath):
 	fpr.close()
 	fpw.close()
 
+
+
 def get_ip_address(ifname):
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     return socket.inet_ntoa(fcntl.ioctl(
@@ -272,8 +277,9 @@ def get_ip_address(ifname):
         struct.pack('256s', ifname[:15])
     )[20:24])
 
-def init():
-	#read parameter
+
+
+def init(tempDataFile,tempBindIp,tempBindPort):
 	global DBPath
 	global ConfigurePath
 	global DataFile
@@ -286,19 +292,25 @@ def init():
 	#init local ip
 	BindIp = get_ip_address("eth0")
 
-
-	f = open("./Configuration.in",'r')
-	filelines = f.readlines()
-	BindIp = filelines[0].strip().split()[-1]
-	BindPort = filelines[1].strip().split()[-1]
-#	ZoneName = filelines[2].strip().split()[-1]
-	DBPath	= filelines[2].strip().split()[-1]
-	ConfigurePath = filelines[3].strip().split()[-1]
-	DataFile = filelines[4].strip().split()[-1]
-	VirtualIp = filelines[5].strip().split()[-1]
-	VirtualName = filelines[6].strip().split()[-1]
-	f.close()
-
+	#read parameter
+	if tempDataFile != "dummy":
+		if tempBindIp != "dummy":
+			BindIp = tempBindIp
+		if tempBindPort != "dummy":
+			BindPort = tempBindPort
+		DataFile = tempDataFile
+	else:
+		f = open("%sConfiguration.in" % PREFIX,'r')
+		filelines = f.readlines()
+		BindIp = filelines[0].strip().split()[-1]
+		BindPort = filelines[1].strip().split()[-1]
+		DBPath	= filelines[2].strip().split()[-1]
+		ConfigurePath = filelines[3].strip().split()[-1]
+		DataFile = filelines[4].strip().split()[-1]
+		VirtualIp = filelines[5].strip().split()[-1]
+		VirtualName = filelines[6].strip().split()[-1]
+		f.close()
+		
 	#init zonename
 	f = open(DataFile,'r')
 	lines = f.readlines()
@@ -306,16 +318,6 @@ def init():
 		if i.strip().split()[3] == 'NS':
 			ZoneName = i.strip().split()[0].split('.')[-2]
 			break
-
-#	print DBPath
-#	print ConfigurePath
-#	print DataFile
-#	print BindIp
-#	print BindPort
-#	print ZoneName
-#	print VirtualIp
-#	print VirtualName
-
 
 	#init Folder
 	if os.path.exists(DBPath) == False:
@@ -331,18 +333,41 @@ def init():
 	
 	
 
-
 if __name__ == "__main__":
-	init()
+	tempBindIp = "dummy"
+	tempBindPort = "dummy"
+	tempDataFile = "dummy"
+	KeyIDFile = 0
+	
+	try:
+		opts,args = getopt.getopt(sys.argv[1:], "s:p:f:k")
+		print opts
+		print args
+	except getopt.GetoptError,info:
+		print info.msg 
+		sys.exit()
+	for option,value in opts:
+		if option in ('-s'):
+			tempBindIp = value
+		elif option in ('-p'):
+			tempBindPort = value
+		elif option in ('-f'):
+			tempDataFile = value
+		elif option in ('-k'):
+			KeyIDFile = 1
+		else:
+			pass
 
+  	
+	init(tempDataFile,tempBindIp,tempBindPort)
 	TLDList = AddVirtualTld2File(DataFile)
 	DataFileName = CreateZoneFile(TLDList,DataFile)
-	KeyDict = KeyGenerate(TLDList)
+	KeyDict = KeyGenerate(TLDList,KeyIDFile)
 	SignDBfile(KeyDict)
 
-	CreateOptions(DataFileDir = DBPath, BindIp = BindIp, BindPort = BindPort)
-	CreateLogging()
-	CreateMultiZone(TLDList)
+#	CreateOptions(DataFileDir = DBPath, BindIp = BindIp, BindPort = BindPort)
+#	CreateLogging()
+#	CreateMultiZone(TLDList)
 	MoveFile(DBPath = DBPath,ConfigurePath = ConfigurePath)
 	ExportTrustedKey(KeyDict,DBfilepath = DBPath)
 	

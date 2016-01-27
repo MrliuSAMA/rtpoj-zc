@@ -1,7 +1,7 @@
-ServerIP = 173.26.101.233
-ServerPort = 53
-BINDDataFile = /var/named/exchange-data
+ServerIP	=	10.0.0.6
+ServerPort	=	53
+BINDDataFile = /opt/RootZoneExchangeServer/exchange-data
 BINDConfigureFile = /etc
-InputZoneFile  = ./DataOrigin.in
+InputZoneFile	=	/opt/RootZoneExchangeServer/ZoneExchangeData.in
 VirtualIp = 1.1.1.1
 VirtualName = a.virtual

@@ -1,0 +1,13 @@
+##configuration file
+##change-time 20160102
+
+#input configuration
+Period			=		14400
+OutputName		=		root.zone.exchangedata
+DataOriginFile		=		/opt/RootZoneExchange/RootZoneExchanger/Query.in
+
+#output configuration
+Prefix			=		/opt/RootZoneExchange/RootZoneExchanged
+BackupFilePath	=		Data/ZoneExchangeBak
+CurFilePath		=		Data/ZoneExchange
+LogPath		=		Log
